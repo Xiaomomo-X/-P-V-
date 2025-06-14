@@ -1,0 +1,567 @@
+#ifndef PCB_H
+#define PCB_H
+
+//进程控制块（结构体）
+#include<string>
+#include<queue>
+using namespace std;
+enum process_state{ready,running,block,exist};
+
+//进程控制块
+class PCB
+{
+    public:
+        int pid;
+        string name;
+        process_state state;
+        string waiting_sem;//阻塞时等待的信号量
+        queue<string> message_queue;//消息队列
+        PCB(int _pid,string _name):pid(_pid),name(_name),state(ready){}
+};
+#endif
+
+#ifndef SEMAPHORE_H
+#define SEMAPHORE_H
+#include<string>
+using namespace std;
+//信号量
+class Semaphore
+{
+    public:
+        string name;
+        int value;
+
+        Semaphore(string _name,int _value)
+            :name(_name),value(_value){}
+};
+#endif
+
+
+#ifndef PROCESS_CONTROL_H
+#define PROCESS_CONTROL_H
+
+#include<iostream>
+#include<vector>
+#include<queue>
+#include"PCB.h"
+using namespace std;
+
+//进程调度器
+class Process_control
+{
+    private:
+        int PC=10000;//程序计数器，初始地址设置为10000
+    public:
+
+        queue<PCB*> ready_queue;//就绪队列
+        queue<PCB*> block_queue;//阻塞队列
+        vector<PCB*> all_processes;//用一个vector向量来保存已有的进程
+
+        //创建进程
+        PCB* create_process(string name);
+
+        //阻塞进程
+        void block_process(PCB* pcb);
+
+        //唤醒进程
+        void wakeup_process(PCB* pcb);
+
+        //终止进程
+        void over_process(PCB* pcb);
+        
+        //移出就绪队列
+        void remove_from_ready_queue(PCB* pcb);
+
+        //移出阻塞队列
+        void remove_from_block_queue(PCB* pcb);
+
+        //添加到就绪队列
+        void add_to_ready_queue(PCB* pcb);
+
+        //添加到阻塞队列
+        void add_to_block_queue(PCB* pcb);
+
+        //发送消息给某个进程
+        void send_message(int to_pid,string content);
+
+        //接收来自进程的消息
+        string receive_message(int from_pid);
+
+        //获取进程
+        PCB* get_process(int pid);
+        
+        //展示所有进程
+        void show_all_processes();
+
+        //展示就绪进程
+        void show_ready_processes();
+        
+        //展示阻塞进程
+        void show_block_processes();
+        
+        //终止所有进程
+        void over_all_processes();
+};
+#endif
+
+
+
+#include"Process_control.h"
+
+//创建进程
+PCB* Process_control::create_process(string name)
+{
+    PC++;
+    PCB* pcb=new PCB(PC,name);
+    ready_queue.push(pcb);
+    all_processes.push_back(pcb);
+    cout<<"创建进程"<<pcb->pid<<"  "<<pcb->name<<endl;
+    return pcb;
+}
+
+//阻塞进程
+void Process_control::block_process(PCB* pcb)
+{
+    PCB* target=NULL;
+    for(auto iter=all_processes.begin();iter!=all_processes.end();iter++)
+    {
+        if((*iter)==pcb)
+        {
+            (*iter)->state=block;
+            block_queue.push(*iter);
+            cout<<"进程"<<(*iter)->name<<"被阻塞"<<endl;
+            target=(*iter);
+            break;
+        }
+    }
+
+    //用临时队列来删除就绪队列中的阻塞进程
+    queue<PCB*> temp;
+    while(!ready_queue.empty())
+    {
+        PCB* pcb=ready_queue.front();
+        ready_queue.pop();
+        if(pcb!=target)
+        {
+            temp.push(pcb);
+        }  
+    }
+    ready_queue=temp;
+}
+
+//唤醒进程
+void Process_control::wakeup_process(PCB *pcb)
+{
+    PCB* target=NULL;
+    for(auto iter=all_processes.begin();iter!=all_processes.end();iter++)
+    {
+        if((*iter)==pcb)
+        {
+            (*iter)->state=ready;
+            ready_queue.push(*iter);
+            cout<<"进程"<<(*iter)->name<<"被唤醒"<<endl;
+            target=(*iter);
+            break;
+        }
+    }
+    queue<PCB*> temp;
+    while(!block_queue.empty())
+    {
+        PCB *pcb=block_queue.front();
+        block_queue.pop();
+        if(pcb!=target)
+        {
+            temp.push(pcb);
+        }
+    }
+    block_queue=temp;
+}
+
+//终止进程
+void Process_control::over_process(PCB* pcb)
+{
+    for(auto iter=all_processes.begin();iter!=all_processes.end();iter++)//vector.begin()返回的是首元素的地址
+    {
+        if((*iter)==pcb)
+        {
+            (*iter)->state=exist;
+            cout<<"进程"<<(*iter)->name<<"终止"<<endl;
+            remove_from_ready_queue((*iter));
+            remove_from_ready_queue((*iter));
+            all_processes.erase(iter);
+            return ;
+        }
+    }
+    cout<<"进程不存在"<<endl;
+}
+
+//从就绪进程中移出某个进程
+void Process_control::remove_from_ready_queue(PCB* pcb) {
+    std::queue<PCB*> temp;
+    while (!ready_queue.empty()) 
+    {
+        PCB* pcb1 = ready_queue.front();
+        ready_queue.pop();
+        if (pcb1!=pcb)
+        {
+            temp.push(pcb1);
+        }
+    }
+    ready_queue = temp;
+}
+
+//从阻塞进程中移出某个进程
+void Process_control::remove_from_block_queue(PCB* pcb) {
+    std::queue<PCB*> temp;
+    while (!block_queue.empty()) 
+    {
+        PCB* pcb1 = block_queue.front();
+        block_queue.pop();
+        if (pcb1!=pcb)
+        {
+            temp.push(pcb1);
+        }
+    }
+    block_queue = temp;
+}
+
+//添加就绪进程
+void Process_control::add_to_ready_queue(PCB* pcb) 
+{
+    ready_queue.push(pcb);
+}
+
+//添加阻塞进程
+void Process_control::add_to_block_queue(PCB* pcb)
+{
+    block_queue.push(pcb);
+}
+
+//发送消息给某个进程
+void Process_control::send_message(int to_pid,string content)
+{
+    PCB* receiver=get_process(to_pid);
+    if(!receiver)
+    {
+        cout<<"不存在该进程，消息发送失败"<<endl;
+    }
+    else
+    {
+        receiver->message_queue.push(content);
+        cout<<"给进程"<<receiver->name<<"发送消息成功"<<endl;
+    }
+}
+
+//接收来自进程的消息
+string Process_control::receive_message(int from_pid)
+{
+    PCB* receiver=get_process(from_pid);
+    if(!receiver)
+    {
+        return "不存在该进程,接收消息失败";
+    }
+
+    if(receiver->message_queue.empty())
+    {
+        return "消息接收失败，该进程无可发送消息";
+    }
+
+    string message=receiver->message_queue.front();
+    receiver->message_queue.pop();
+    return message;
+}
+//取某个进程
+PCB* Process_control::get_process(int pid)
+{
+
+    for(auto &pcb: all_processes)
+    {
+        if(pcb->pid==pid)
+        {
+            cout<<"存在该进程，已返回"<<endl;
+            return pcb;
+        }
+    }
+    cout<<"不存在该进程"<<endl;
+    return NULL;      
+}
+
+//显示所有进程信息
+void Process_control::show_all_processes()
+{
+    cout<<"所有进程"<<endl;
+    if(all_processes.empty())
+    {
+        cout<<"无进程"<<endl;
+    }
+    for(auto &pcb: all_processes)
+    {
+        cout<<"进程id: "<<pcb->pid<<" 进程名称："<<pcb->name<<" 进程状态："<<pcb->state<<endl;
+    }
+}
+
+//显示就绪进程
+void Process_control::show_ready_processes()
+{
+    cout<<"就绪进程"<<endl;
+    queue<PCB*> temp=ready_queue;
+    if(temp.empty())
+    {
+        cout<<"无就绪进程"<<endl;
+    }
+    while(!temp.empty())
+    {
+        PCB* pcb=temp.front();
+        temp.pop();
+        cout<<"进程id: "<<pcb->pid<<" 进程名称："<<pcb->name<<" 进程状态："<<pcb->state<<endl;
+    }
+}
+
+//显示阻塞进程
+void Process_control::show_block_processes()
+{
+    cout<<"阻塞进程"<<endl;
+    queue<PCB*> temp=block_queue;
+    if(temp.empty())
+    {
+        cout<<"无阻塞进程"<<endl;
+    }
+    while(!temp.empty())
+    {
+        PCB* pcb=temp.front();
+        temp.pop();
+        cout<<"进程id: "<<pcb->pid<<" 进程名称："<<pcb->name<<" 进程状态："<<pcb->state<<endl;
+    }
+}
+
+//为了方便，直接写个函数吧所有进程终止
+void Process_control::over_all_processes()
+{
+    for(PCB* &pcb: all_processes)
+    {
+        delete pcb;
+    }
+    all_processes.clear();
+    while(!ready_queue.empty())
+    {
+        ready_queue.pop();
+    }
+    while(!block_queue.empty())
+    {
+        block_queue.pop();
+    }
+    cout<<"已清空所有进程"<<endl;
+}
+
+
+#ifndef RESOURCE_H
+#define RESOURCE_H
+#include<string>
+#include<queue>
+#include"Semaphore.h"
+#include"PCB.h"
+class Process_control;
+class Resource
+{
+    public:
+        string name;
+        Semaphore sem;
+        Process_control &controller;
+        PCB* running_process=NULL;
+        queue<PCB*> wait_queue;
+    
+        Resource(string _name,Semaphore _sem,Process_control& _controller)
+            :name(_name),sem(_sem),controller(_controller){}
+
+        void P(PCB* pcb);
+        void V();
+        void show_wait_queue();
+};
+#endif
+
+
+#include"Resource.h"
+#include"Process_control.h"
+void Resource::P(PCB* pcb)
+{
+    sem.value--;
+    if(sem.value<0)
+    {
+        pcb->state=block;
+        pcb->waiting_sem=sem.name;
+        wait_queue.push(pcb);
+        controller.remove_from_ready_queue(pcb);
+        controller.add_to_block_queue(pcb);
+        cout<<"进程"<<pcb->pid<<"被阻塞到信号量"<<name<<"中"<<endl;
+    }
+    else
+    {
+        pcb->state=running;
+        controller.remove_from_ready_queue(pcb);
+        running_process=pcb;
+        cout<<"进程"<<pcb->pid<<"获得信号量"<<endl;
+    }
+}
+
+void Resource::V()
+{
+    if(running_process)
+    {
+        PCB* pcb=running_process;
+        pcb->state=exist;
+        controller.over_process(pcb);
+        running_process=NULL;
+    }
+    sem.value++;
+    if(sem.value<=0&&!wait_queue.empty())
+    {
+        PCB* pcb=wait_queue.front();
+        wait_queue.pop();
+        pcb->state=ready;
+        pcb->waiting_sem=" ";
+        controller.wakeup_process(pcb);
+        cout<<"唤醒进程"<<pcb->name<<endl;
+    }
+}
+
+
+void Resource::show_wait_queue()
+{
+    cout<<"信号量"<<name<<"中的等待队列"<<endl;
+    queue<PCB*> temp=wait_queue;
+    if(temp.empty())
+    {
+        cout<<"信号量"<<name<<"无阻塞进程"<<endl;
+    }
+    else
+    {
+        while(!temp.empty())
+        {
+            PCB* pcb=temp.front();
+            temp.pop();
+            cout<<"进程id: "<<pcb->pid<<" 进程名称："<<pcb->name<<" 进程状态："<<pcb->state<<endl;
+        }
+    }
+}
+
+
+#include<iostream>
+#include<string>
+#include<map>
+#include"PCB.h"
+#include"Semaphore.h"
+#include"Resource.h"
+#include"Process_control.h"
+using namespace std;
+
+
+int main()
+{
+    Process_control controller;
+    map<string, Semaphore> semaphores;
+    map<string, Resource*> resources;
+
+    while(true)
+    {
+        cout << "\n===== 菜单 =====\n"
+             << "1. 创建信号量\n"
+             << "2. 创建进程\n"
+             << "3. 创建资源\n"
+             << "4. 申请资源 (P操作)\n"
+             << "5. 释放资源 (V操作)\n"
+             << "6. 显示所有进程\n"
+             << "7. 显示就绪队列\n"
+             << "8. 显示阻塞队列\n"
+             << "9. 显示资源等待队列\n"
+             << "0. 退出\n请输入选择：";
+        int choice;
+        cin >> choice;
+
+        if(choice == 0)
+        {
+            controller.over_all_processes();
+            break;
+        }
+        else if(choice == 1)
+        {
+            string name;
+            int value;
+            cout << "输入信号量名称 和 初始值：";
+            cin >> name >> value;
+            semaphores[name] = Semaphore(name, value);
+            cout << "信号量 " << name << " 创建成功\n";
+        }
+        else if(choice == 2)
+        {
+            string name;
+            cout << "输入进程名称：";
+            cin >> name;
+            controller.create_process(name);
+        }
+        else if(choice == 3)
+        {
+            string res_name, sem_name;
+            cout << "输入资源名称 和 绑定的信号量名称：";
+            cin >> res_name >> sem_name;
+            if(semaphores.find(sem_name) == semaphores.end())
+            {
+                cout << "信号量不存在，先创建信号量\n";
+                continue;
+            }
+            // 注意：用信号量副本创建 Resource
+            resources[res_name] = new Resource(res_name, semaphores[sem_name], controller);
+            cout << "资源 " << res_name << " 创建成功\n";
+        }
+        else if(choice == 4)
+        {
+            string res_name;
+            int pid;
+            cout << "输入资源名 和 请求资源的进程PID：";
+            cin >> res_name >> pid;
+            if(resources.find(res_name) == resources.end())
+            {
+                cout << "资源不存在\n";
+                continue;
+            }
+            PCB* pcb = controller.get_process(pid);
+            if(pcb)
+                resources[res_name]->P(pcb);
+        }
+        else if(choice == 5)
+        {
+            string res_name;
+            cout << "输入资源名：";
+            cin >> res_name;
+            if(resources.find(res_name) == resources.end())
+            {
+                cout << "资源不存在\n";
+                continue;
+            }
+            resources[res_name]->V();
+        }
+        else if(choice == 6)
+        {
+            controller.show_all_processes();
+        }
+        else if(choice == 7)
+        {
+            controller.show_ready_processes();
+        }
+        else if(choice == 8)
+        {
+            controller.show_block_processes();
+        }
+        else if(choice == 9)
+        {
+            string res_name;
+            cout << "输入资源名：";
+            cin >> res_name;
+            if(resources.find(res_name) != resources.end())
+                resources[res_name]->show_wait_queue();
+            else
+                cout << "资源不存在\n";
+        }
+    }
+
+    return 0;
+}
